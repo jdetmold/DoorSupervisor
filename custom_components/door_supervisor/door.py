@@ -128,6 +128,10 @@ class Door:
             self._next_threshold_idx = 0
             effects.append(Notify.make(EVENT_OPENED, source_entity))
             effects.extend(self._schedule_next_threshold())
+            # Opening cancels any pending auto-lock countdown
+            if self._auto_lock_eta is not None:
+                effects.append(Cancel(name=SCHED_AUTO_LOCK))
+                self._auto_lock_eta = None
         elif new_open is False:
             # Cancel any pending threshold before resetting index
             if self.config.left_open_thresholds_minutes and self._open_since is not None:
@@ -137,6 +141,7 @@ class Door:
             self._open_since = None
             self._next_threshold_idx = 0
             effects.append(Notify.make(EVENT_CLOSED, source_entity))
+            effects.extend(self._maybe_schedule_auto_lock())
         else:
             # Transitioned to unknown — cancel any pending threshold and clear state.
             if self.config.left_open_thresholds_minutes and self._open_since is not None:
@@ -146,6 +151,19 @@ class Door:
             self._open_since = None
             self._next_threshold_idx = 0
         return effects
+
+    def _maybe_schedule_auto_lock(self) -> list[DoorEffect]:
+        """Schedule auto-lock from a closed state, if eligible."""
+        if not self.config.lock_entity_id or not self.config.auto_lock_enabled:
+            return []
+        if not self.config.has_open_close_signal:
+            # lock-only mode is handled separately by on_lock_state
+            return []
+        delay_seconds = self.config.auto_lock_delay_minutes * 60
+        from datetime import timedelta
+
+        self._auto_lock_eta = self._clock() + timedelta(seconds=delay_seconds)
+        return [Schedule(name=SCHED_AUTO_LOCK, delay_seconds=delay_seconds)]
 
     def _schedule_next_threshold(self) -> list[DoorEffect]:
         """Schedule the next threshold callback, if any remain."""
@@ -166,9 +184,29 @@ class Door:
 
     def on_schedule_fired(self, name: str) -> list[DoorEffect]:
         """Handle a scheduled callback firing."""
+        if name == SCHED_AUTO_LOCK:
+            return self._on_auto_lock_fired()
         if name.startswith(SCHED_THRESHOLD_PREFIX):
             return self._on_threshold_fired(name)
         return []
+
+    def _on_auto_lock_fired(self) -> list[DoorEffect]:
+        if self._auto_lock_eta is None:
+            return []  # stale
+        self._auto_lock_eta = None
+        # Defensive: if door is open when callback fires, do nothing
+        if self.config.has_open_close_signal and self.is_open:
+            return []
+        # Optimistically mark lock as locked to avoid double-emit when the lock entity reflects the change
+        self._lock_locked = True
+        return [
+            LockNow(),
+            Notify.make(
+                EVENT_LOCKED,
+                self.config.lock_entity_id or "",
+                auto=True,
+            ),
+        ]
 
     def _on_threshold_fired(self, name: str) -> list[DoorEffect]:
         try:
