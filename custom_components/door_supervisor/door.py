@@ -122,18 +122,70 @@ class Door:
     def _handle_open_close_change(
         self, new_open: bool | None, source_entity: str
     ) -> list[DoorEffect]:
-        """Emit opened/closed effects and update timers. Locks/thresholds handled in later tasks."""
         effects: list[DoorEffect] = []
         if new_open is True:
             self._open_since = self._clock()
             self._next_threshold_idx = 0
             effects.append(Notify.make(EVENT_OPENED, source_entity))
+            effects.extend(self._schedule_next_threshold())
         elif new_open is False:
+            # Cancel any pending threshold before resetting index
+            if self.config.left_open_thresholds_minutes and self._open_since is not None:
+                effects.append(
+                    Cancel(name=f"{SCHED_THRESHOLD_PREFIX}{self._next_threshold_idx}")
+                )
             self._open_since = None
             self._next_threshold_idx = 0
             effects.append(Notify.make(EVENT_CLOSED, source_entity))
         else:
-            # Transitioned to unknown — clear open-tracking state, emit nothing.
+            # Transitioned to unknown — cancel any pending threshold and clear state.
+            if self.config.left_open_thresholds_minutes and self._open_since is not None:
+                effects.append(
+                    Cancel(name=f"{SCHED_THRESHOLD_PREFIX}{self._next_threshold_idx}")
+                )
             self._open_since = None
             self._next_threshold_idx = 0
+        return effects
+
+    def _schedule_next_threshold(self) -> list[DoorEffect]:
+        """Schedule the next threshold callback, if any remain."""
+        thresholds = self.config.left_open_thresholds_minutes
+        if self._next_threshold_idx >= len(thresholds):
+            return []
+        next_total = thresholds[self._next_threshold_idx]
+        prev_total = (
+            thresholds[self._next_threshold_idx - 1] if self._next_threshold_idx > 0 else 0
+        )
+        delay_minutes = next_total - prev_total
+        return [
+            Schedule(
+                name=f"{SCHED_THRESHOLD_PREFIX}{self._next_threshold_idx}",
+                delay_seconds=delay_minutes * 60,
+            )
+        ]
+
+    def on_schedule_fired(self, name: str) -> list[DoorEffect]:
+        """Handle a scheduled callback firing."""
+        if name.startswith(SCHED_THRESHOLD_PREFIX):
+            return self._on_threshold_fired(name)
+        return []
+
+    def _on_threshold_fired(self, name: str) -> list[DoorEffect]:
+        try:
+            idx = int(name[len(SCHED_THRESHOLD_PREFIX):])
+        except ValueError:
+            return []
+        thresholds = self.config.left_open_thresholds_minutes
+        if idx != self._next_threshold_idx or idx >= len(thresholds):
+            return []  # stale callback, ignore
+        source = self.config.sensor_entity_id or self.config.cover_entity_id or ""
+        effects: list[DoorEffect] = [
+            Notify.make(
+                EVENT_LEFT_OPEN_WARNING,
+                source,
+                minutes_open=thresholds[idx],
+            )
+        ]
+        self._next_threshold_idx += 1
+        effects.extend(self._schedule_next_threshold())
         return effects
