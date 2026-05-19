@@ -3,6 +3,7 @@
   "name": "Door Supervisor",
   "codeowners": ["@techyyc"],
   "config_flow": true,
+  "single_config_entry": true,
   "documentation": "https://github.com/techyyc/HA-DoorSupervisor",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/techyyc/HA-DoorSupervisor/issues",

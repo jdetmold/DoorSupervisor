@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Door Supervisor",
+        "description": "Creates the Door Supervisor hub. After setup, add individual doors as subentries."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Door Supervisor is already configured."
+    }
+  },
+  "entity": {
+    "switch": {
+      "notifications_enabled": {
+        "name": "Notifications enabled"
+      },
+      "auto_lock_enabled": {
+        "name": "Auto-lock enabled"
+      }
+    }
+  }
+}
