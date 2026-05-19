@@ -189,3 +189,24 @@ class Door:
         self._next_threshold_idx += 1
         effects.extend(self._schedule_next_threshold())
         return effects
+
+    def on_lock_state(self, state: str) -> list[DoorEffect]:
+        """Handle a lock entity state change."""
+        if state == "locked":
+            new_locked: bool | None = True
+        elif state == "unlocked":
+            new_locked = False
+        else:
+            return []
+        if self._lock_locked == new_locked:
+            return []
+        self._lock_locked = new_locked
+        if new_locked:
+            return [
+                Notify.make(
+                    EVENT_LOCKED,
+                    self.config.lock_entity_id or "",
+                    auto=False,
+                )
+            ]
+        return [Notify.make(EVENT_UNLOCKED, self.config.lock_entity_id or "")]
