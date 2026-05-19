@@ -138,3 +138,16 @@ def test_with_signal_unlock_does_not_schedule_auto_lock():
     door = Door(_cfg_with_signal(), clock=_clock())
     effects = door.on_lock_state("unlocked")
     assert not any(isinstance(e, Schedule) and e.name == SCHED_AUTO_LOCK for e in effects)
+
+
+def test_with_signal_manual_relock_cancels_auto_lock():
+    """When the door has an open/close signal and the user manually locks
+    during the auto-lock countdown, the schedule must be cancelled to
+    avoid a spurious auto=True notification when the timer fires."""
+    door = Door(_cfg_with_signal(), clock=_clock())
+    door.on_sensor_state(True)
+    door.on_sensor_state(False)
+    # countdown is now active
+    effects = door.on_lock_state("locked")
+    assert Cancel(name=SCHED_AUTO_LOCK) in effects
+    assert door.auto_lock_eta is None

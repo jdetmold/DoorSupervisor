@@ -62,3 +62,39 @@ async def test_open_at_startup_starts_threshold_from_now_not_retroactive(hass: H
             if c.get("variables", {}).get("event_type") == "left_open_warning"
         ]
         assert len(warnings) == 1
+
+
+async def test_cover_open_at_startup_does_not_fire_opened_notification(hass: HomeAssistant):
+    """A cover that is open at integration startup must NOT emit a spurious
+    'opened' notification — only the threshold countdown should start."""
+    calls = []
+
+    async def fake_script(call):
+        calls.append(call.data)
+
+    hass.services.async_register("script", "notify", fake_script)
+    # Pre-existing state: cover already open
+    hass.states.async_set("cover.garage", "open")
+
+    await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    await hass.async_block_till_done()
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_DOOR), context={"source": "user"}
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_NAME: "Garage", "notification_script": "script.notify"}
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {"cover": "cover.garage"}
+    )
+    await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {"cover_event_notifications": True, "left_open_thresholds_minutes": ""},
+    )
+    await hass.async_block_till_done()
+    # No opened notification should have fired during seed
+    opened = [c for c in calls if c.get("variables", {}).get("event_type") == "opened"]
+    assert opened == [], f"Expected no opened-at-startup notification, got: {opened}"

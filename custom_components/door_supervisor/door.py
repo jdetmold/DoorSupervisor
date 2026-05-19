@@ -243,8 +243,8 @@ class Door:
             effects.append(
                 Notify.make(EVENT_LOCKED, self.config.lock_entity_id or "", auto=False)
             )
-            # Manual relock cancels lock-only auto-lock countdown
-            if self._auto_lock_eta is not None and not self.config.has_open_close_signal:
+            # Manual relock cancels any pending auto-lock countdown
+            if self._auto_lock_eta is not None:
                 effects.append(Cancel(name=SCHED_AUTO_LOCK))
                 self._auto_lock_eta = None
         else:

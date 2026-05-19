@@ -134,6 +134,52 @@ async def test_no_script_configured_suppresses_silently(hass: HomeAssistant):
     assert calls == []  # no script configured, no notification
 
 
+async def test_auto_lock_notification_suppressed_when_global_auto_lock_off(hass: HomeAssistant):
+    """When global auto-lock is disabled, the schedule fires but no LockNow service call
+    nor auto=True notification should happen."""
+    calls = []
+
+    async def fake_script(call):
+        calls.append(call.data)
+
+    hass.services.async_register("script", "notify", fake_script)
+    await _setup_front_door(
+        hass,
+        auto_lock_enabled=True,
+        auto_lock_delay_minutes=5,
+        lock_event_notifications=True,
+    )
+    await hass.services.async_call(
+        "switch", "turn_off",
+        {"entity_id": "switch.door_supervisor_auto_lock_enabled"},
+        blocking=True,
+    )
+    from datetime import timedelta
+
+    from freezegun import freeze_time
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    with freeze_time(dt_util.utcnow()) as frozen:
+        # close the door to start the countdown
+        hass.states.async_set("binary_sensor.front_door", "on")
+        await hass.async_block_till_done()
+        hass.states.async_set("binary_sensor.front_door", "off")
+        await hass.async_block_till_done()
+        calls.clear()
+        frozen.tick(delta=timedelta(minutes=5, seconds=1))
+        async_fire_time_changed(hass, dt_util.utcnow())
+        await hass.async_block_till_done()
+        # auto-lock fired internally but should be globally blocked
+        auto_lock_notifications = [
+            c for c in calls
+            if c.get("variables", {}).get("auto") is True
+        ]
+        assert auto_lock_notifications == [], (
+            f"Expected no auto=True notifications, got: {auto_lock_notifications}"
+        )
+
+
 async def test_left_open_warning_payload_contains_minutes_open(hass: HomeAssistant):
     from datetime import timedelta
 

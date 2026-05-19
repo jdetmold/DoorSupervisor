@@ -115,11 +115,11 @@ class DoorRuntime:
                     self.hass, entity_ids, self._on_state_change
                 )
             )
-        # Seed from current states
+        # Seed from current states (suppress notifications for the seed pass)
         for eid in entity_ids:
             state = self.hass.states.get(eid)
             if state is not None:
-                self._apply_state(eid, state.state)
+                self._apply_state(eid, state.state, seed=True)
 
     def stop(self) -> None:
         for u in self._unsub_state:
@@ -139,9 +139,9 @@ class DoorRuntime:
         new = event.data["new_state"]
         if new is None:
             return
-        self._apply_state(event.data["entity_id"], new.state)
+        self._apply_state(event.data["entity_id"], new.state, seed=False)
 
-    def _apply_state(self, entity_id: str, state: str) -> None:
+    def _apply_state(self, entity_id: str, state: str, seed: bool = False) -> None:
         if entity_id == self.config.lock_entity_id:
             effects = self.door.on_lock_state(state)
         elif entity_id == self.config.cover_entity_id:
@@ -150,6 +150,11 @@ class DoorRuntime:
             effects = self.door.on_sensor_state(state == "on")
         else:
             return
+        if seed:
+            # During startup seed, drop Notify effects but keep Schedule/Cancel/LockNow.
+            # LockNow is unlikely but we still let it through (defensive); Schedules
+            # for thresholds need to be installed so warnings fire after restart.
+            effects = [e for e in effects if not isinstance(e, Notify)]
         self._apply_effects(effects)
 
     def _apply_effects(self, effects: list) -> None:
@@ -211,6 +216,38 @@ class Coordinator:
             self.doors[sub_id] = runtime
             if self.entity_factory is not None:
                 self.entity_factory(sub_id, runtime)
+        # Watch for subentry additions/removals in-memory (avoids full reload)
+        self.entry.async_on_unload(
+            self.entry.add_update_listener(self._on_entry_updated)
+        )
+
+    async def _on_entry_updated(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Handle entry updates by syncing DoorRuntime instances to current subentries.
+
+        Called when the entry changes (e.g. a subentry is added). We add new
+        DoorRuntime instances for new subentries without tearing down existing ones,
+        so in-flight auto-lock and threshold timers are preserved.
+        Entry data changes (e.g. from switch toggles) are already reflected in-memory
+        via HubState and do not require any runtime change.
+        """
+        current_sub_ids = {
+            sub_id
+            for sub_id, sub in entry.subentries.items()
+            if sub.subentry_type == SUBENTRY_DOOR
+        }
+        known_sub_ids = set(self.doors.keys())
+        # Add runtimes for newly created subentries
+        for sub_id in current_sub_ids - known_sub_ids:
+            sub = entry.subentries[sub_id]
+            cfg = _build_config(sub)
+            runtime = DoorRuntime(hass, self, sub_id, cfg)
+            runtime.start()
+            self.doors[sub_id] = runtime
+            if self.entity_factory is not None:
+                self.entity_factory(sub_id, runtime)
+        # Stop runtimes for removed subentries
+        for sub_id in known_sub_ids - current_sub_ids:
+            self.doors.pop(sub_id).stop()
 
     def stop(self) -> None:
         for runtime in self.doors.values():
@@ -219,6 +256,10 @@ class Coordinator:
 
     def dispatch_notify(self, cfg: DoorConfig, eff: Notify) -> None:
         if not self.hub_state.notifications_enabled:
+            return
+        extras = eff.extras_dict
+        # Suppress auto-lock notifications when global auto-lock is disabled
+        if extras.get("auto") is True and not self.hub_state.auto_lock_enabled:
             return
         # Per-category gating
         if eff.event_type in (EVENT_LOCKED, EVENT_UNLOCKED):
@@ -231,7 +272,6 @@ class Coordinator:
         # event_type == EVENT_LEFT_OPEN_WARNING is always allowed if it fires
         if not cfg.notification_script:
             return
-        extras = eff.extras_dict
         message = _format_message(cfg.name, eff.event_type, extras)
         payload = {
             "door_name": cfg.name,

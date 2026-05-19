@@ -52,6 +52,8 @@ The script receives these variables:
 | `minutes_open` | only on `left_open_warning` | Threshold value that fired |
 | `auto` | only on `locked` | `true` if auto-lock fired, `false` if manual |
 
+**Note on `opened` / `closed` events:** these fire only for doors with a cover entity configured (with `cover_event_notifications` enabled). Sensor-only doors emit only `left_open_warning`. If you want to be notified every time a sensor-only door opens or closes, configure thresholds — or add a cover entity if your hardware supports it.
+
 Example script using the message as-is:
 
 ```yaml
