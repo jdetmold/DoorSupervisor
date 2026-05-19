@@ -229,7 +229,6 @@ class Door:
         return effects
 
     def on_lock_state(self, state: str) -> list[DoorEffect]:
-        """Handle a lock entity state change."""
         if state == "locked":
             new_locked: bool | None = True
         elif state == "unlocked":
@@ -239,12 +238,26 @@ class Door:
         if self._lock_locked == new_locked:
             return []
         self._lock_locked = new_locked
+        effects: list[DoorEffect] = []
         if new_locked:
-            return [
-                Notify.make(
-                    EVENT_LOCKED,
-                    self.config.lock_entity_id or "",
-                    auto=False,
-                )
-            ]
-        return [Notify.make(EVENT_UNLOCKED, self.config.lock_entity_id or "")]
+            effects.append(
+                Notify.make(EVENT_LOCKED, self.config.lock_entity_id or "", auto=False)
+            )
+            # Manual relock cancels lock-only auto-lock countdown
+            if self._auto_lock_eta is not None and not self.config.has_open_close_signal:
+                effects.append(Cancel(name=SCHED_AUTO_LOCK))
+                self._auto_lock_eta = None
+        else:
+            effects.append(Notify.make(EVENT_UNLOCKED, self.config.lock_entity_id or ""))
+            # Lock-only mode: schedule auto-lock from unlock event
+            if (
+                self.config.auto_lock_enabled
+                and not self.config.has_open_close_signal
+                and self.config.lock_entity_id
+            ):
+                from datetime import timedelta
+
+                delay = self.config.auto_lock_delay_minutes * 60
+                self._auto_lock_eta = self._clock() + timedelta(seconds=delay)
+                effects.append(Schedule(name=SCHED_AUTO_LOCK, delay_seconds=delay))
+        return effects

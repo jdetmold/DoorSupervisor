@@ -91,3 +91,50 @@ def test_auto_lock_eta_cleared_after_firing():
     door.on_sensor_state(False)
     door.on_schedule_fired(SCHED_AUTO_LOCK)
     assert door.auto_lock_eta is None
+
+
+def _cfg_lock_only(**overrides):
+    base = dict(
+        name="Smart Lock Door",
+        lock_entity_id="lock.smartlock",
+        auto_lock_enabled=True,
+        auto_lock_delay_minutes=5,
+    )
+    base.update(overrides)
+    return DoorConfig(**base)
+
+
+def test_lock_only_unlock_schedules_auto_lock():
+    door = Door(_cfg_lock_only(), clock=_clock())
+    effects = door.on_lock_state("unlocked")
+    assert Schedule(name=SCHED_AUTO_LOCK, delay_seconds=5 * 60) in effects
+
+
+def test_lock_only_manual_relock_cancels_auto_lock():
+    door = Door(_cfg_lock_only(), clock=_clock())
+    door.on_lock_state("unlocked")
+    effects = door.on_lock_state("locked")
+    assert Cancel(name=SCHED_AUTO_LOCK) in effects
+
+
+def test_lock_only_disabled_does_not_schedule():
+    door = Door(_cfg_lock_only(auto_lock_enabled=False), clock=_clock())
+    effects = door.on_lock_state("unlocked")
+    assert not any(isinstance(e, Schedule) and e.name == SCHED_AUTO_LOCK for e in effects)
+
+
+def test_lock_only_auto_lock_eta_set_and_cleared():
+    from datetime import timedelta
+    door = Door(_cfg_lock_only(), clock=_clock())
+    door.on_lock_state("unlocked")
+    assert door.auto_lock_eta == T0 + timedelta(minutes=5)
+    door.on_lock_state("locked")
+    assert door.auto_lock_eta is None
+
+
+def test_with_signal_unlock_does_not_schedule_auto_lock():
+    """When the door has an open/close signal, the auto-lock trigger is the closed event,
+    not the unlock event. This test guards against double-scheduling."""
+    door = Door(_cfg_with_signal(), clock=_clock())
+    effects = door.on_lock_state("unlocked")
+    assert not any(isinstance(e, Schedule) and e.name == SCHED_AUTO_LOCK for e in effects)
