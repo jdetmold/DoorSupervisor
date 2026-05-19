@@ -25,9 +25,12 @@ async def _setup_hub_and_door(hass, door_data: dict) -> tuple:
         context={"source": "user"},
     )
     # walk through the three steps
+    basics = {CONF_NAME: door_data[CONF_NAME]}
+    if door_data.get(CONF_NOTIFICATION_SCRIPT) is not None:
+        basics[CONF_NOTIFICATION_SCRIPT] = door_data[CONF_NOTIFICATION_SCRIPT]
     result = await hass.config_entries.subentries.async_configure(
         result["flow_id"],
-        {CONF_NAME: door_data[CONF_NAME], CONF_NOTIFICATION_SCRIPT: door_data.get(CONF_NOTIFICATION_SCRIPT)},
+        basics,
     )
     result = await hass.config_entries.subentries.async_configure(
         result["flow_id"],

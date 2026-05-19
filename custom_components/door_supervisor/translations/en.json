@@ -58,6 +58,23 @@
       "auto_lock_enabled": {
         "name": "Auto-lock enabled"
       }
+    },
+    "sensor": {
+      "door_status": {
+        "name": "Status",
+        "state": {
+          "closed": "Closed",
+          "open": "Open",
+          "open_warning": "Open (warning)",
+          "unknown": "Unknown"
+        }
+      },
+      "open_duration_minutes": {
+        "name": "Open duration minutes"
+      },
+      "auto_lock_eta": {
+        "name": "Auto-lock ETA"
+      }
     }
   }
 }
