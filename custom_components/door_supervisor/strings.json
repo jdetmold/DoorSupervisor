@@ -10,6 +10,46 @@
       "single_instance_allowed": "Door Supervisor is already configured."
     }
   },
+  "config_subentries": {
+    "door": {
+      "initiate_flow": {
+        "user": "Add door",
+        "reconfigure": "Edit door"
+      },
+      "step": {
+        "basics": {
+          "title": "Door basics",
+          "data": {
+            "name": "Door name",
+            "notification_script": "Notification script (optional)"
+          }
+        },
+        "entities": {
+          "title": "Door entities",
+          "description": "Select at least one of lock, cover, or door sensor. If both sensor and cover are configured, the sensor wins.",
+          "data": {
+            "lock": "Lock entity (optional)",
+            "cover": "Cover entity (optional)",
+            "door_sensor": "Door sensor (optional)"
+          }
+        },
+        "features": {
+          "title": "Features",
+          "description": "Configure auto-lock and notification behavior. Empty threshold list disables left-open warnings.",
+          "data": {
+            "auto_lock_enabled": "Enable auto-lock",
+            "auto_lock_delay_minutes": "Auto-lock delay (minutes)",
+            "lock_event_notifications": "Notify on lock/unlock",
+            "cover_event_notifications": "Notify on open/close",
+            "left_open_thresholds_minutes": "Left-open thresholds (comma-separated minutes, e.g. 30,60,90)"
+          }
+        }
+      },
+      "error": {
+        "at_least_one_entity": "Select at least one of lock, cover, or door sensor."
+      }
+    }
+  },
   "entity": {
     "switch": {
       "notifications_enabled": {
