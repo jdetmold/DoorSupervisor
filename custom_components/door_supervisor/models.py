@@ -49,7 +49,7 @@ class Notify:
 
     @classmethod
     def make(cls, event_type: str, entity_id: str, **extras: object) -> "Notify":
-        return cls(event_type=event_type, entity_id=entity_id, extras=tuple(extras.items()))
+        return cls(event_type=event_type, entity_id=entity_id, extras=tuple(sorted(extras.items())))
 
     @property
     def extras_dict(self) -> dict[str, object]:
