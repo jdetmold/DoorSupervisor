@@ -5,6 +5,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import (
+    SOURCE_RECONFIGURE,
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
@@ -147,6 +148,13 @@ class DoorSubentryFlow(ConfigSubentryFlow):
             )
             self._data.update(features)
             title = self._data[CONF_NAME]
+            if self.source == SOURCE_RECONFIGURE:
+                return self.async_update_and_abort(
+                    self._get_entry(),
+                    self._get_reconfigure_subentry(),
+                    title=title,
+                    data=self._data,
+                )
             return self.async_create_entry(title=title, data=self._data)
         return self.async_show_form(
             step_id="features", data_schema=self._features_schema()

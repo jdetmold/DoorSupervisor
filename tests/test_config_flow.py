@@ -158,3 +158,58 @@ async def test_subentry_cover_only_features_step_omits_lock_fields(hass: HomeAss
     assert CONF_AUTO_LOCK_ENABLED not in schema_keys
     assert CONF_COVER_EVENT_NOTIFICATIONS in schema_keys
     assert CONF_LEFT_OPEN_THRESHOLDS in schema_keys
+
+
+async def test_subentry_reconfigure_updates_existing_door(hass: HomeAssistant):
+    """Reconfigure flow walks all 3 steps and updates the existing subentry
+    in place — does NOT create a duplicate."""
+    entry = await _setup_hub(hass)
+    # First, add a door
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_DOOR),
+        context={"source": "user"},
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_NAME: "Front Door"}
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_LOCK: "lock.front"}
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {
+            CONF_AUTO_LOCK_ENABLED: True,
+            CONF_AUTO_LOCK_DELAY_MINUTES: 5,
+            CONF_LOCK_EVENT_NOTIFICATIONS: True,
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert len(entry.subentries) == 1
+    sub_id = next(iter(entry.subentries))
+
+    # Now reconfigure: change delay from 5 to 10 minutes
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_DOOR),
+        context={"source": "reconfigure", "subentry_id": sub_id},
+    )
+    assert result["step_id"] == "basics"
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_NAME: "Front Door"}
+    )
+    assert result["step_id"] == "entities"
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_LOCK: "lock.front"}
+    )
+    assert result["step_id"] == "features"
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {
+            CONF_AUTO_LOCK_ENABLED: True,
+            CONF_AUTO_LOCK_DELAY_MINUTES: 10,
+            CONF_LOCK_EVENT_NOTIFICATIONS: True,
+        },
+    )
+    # Subentry should still be exactly ONE — same id, updated data
+    assert len(entry.subentries) == 1
+    assert sub_id in entry.subentries
+    assert entry.subentries[sub_id].data[CONF_AUTO_LOCK_DELAY_MINUTES] == 10
