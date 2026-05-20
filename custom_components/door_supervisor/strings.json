@@ -12,6 +12,7 @@
   },
   "config_subentries": {
     "door": {
+      "entry_type": "Door",
       "initiate_flow": {
         "user": "Add door",
         "reconfigure": "Edit door"
