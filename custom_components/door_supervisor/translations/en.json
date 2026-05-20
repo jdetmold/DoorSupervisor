@@ -20,8 +20,7 @@
         "basics": {
           "title": "Door basics",
           "data": {
-            "name": "Door name",
-            "notification_script": "Notification script (optional)"
+            "name": "Door name"
           }
         },
         "entities": {

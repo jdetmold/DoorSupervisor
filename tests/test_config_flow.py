@@ -75,7 +75,6 @@ from custom_components.door_supervisor.const import (
     CONF_LOCK,
     CONF_LOCK_EVENT_NOTIFICATIONS,
     CONF_NAME,
-    CONF_NOTIFICATION_SCRIPT,
     SUBENTRY_DOOR,
 )
 
@@ -98,7 +97,7 @@ async def test_subentry_add_lock_plus_sensor_door(hass: HomeAssistant):
     assert result["step_id"] == "basics"
     result = await hass.config_entries.subentries.async_configure(
         result["flow_id"],
-        {CONF_NAME: "Front Door", CONF_NOTIFICATION_SCRIPT: "script.notify_phone"},
+        {CONF_NAME: "Front Door"},
     )
     assert result["step_id"] == "entities"
     result = await hass.config_entries.subentries.async_configure(

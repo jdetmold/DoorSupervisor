@@ -8,7 +8,6 @@ from custom_components.door_supervisor.const import (
     CONF_DOOR_SENSOR,
     CONF_LOCK,
     CONF_NAME,
-    CONF_NOTIFICATION_SCRIPT,
     DOMAIN,
     SUBENTRY_DOOR,
 )
@@ -25,12 +24,9 @@ async def _setup_hub_and_door(hass, door_data: dict) -> tuple:
         context={"source": "user"},
     )
     # walk through the three steps
-    basics = {CONF_NAME: door_data[CONF_NAME]}
-    if door_data.get(CONF_NOTIFICATION_SCRIPT) is not None:
-        basics[CONF_NOTIFICATION_SCRIPT] = door_data[CONF_NOTIFICATION_SCRIPT]
     result = await hass.config_entries.subentries.async_configure(
         result["flow_id"],
-        basics,
+        {CONF_NAME: door_data[CONF_NAME]},
     )
     result = await hass.config_entries.subentries.async_configure(
         result["flow_id"],
@@ -39,7 +35,7 @@ async def _setup_hub_and_door(hass, door_data: dict) -> tuple:
     result = await hass.config_entries.subentries.async_configure(
         result["flow_id"],
         {k: v for k, v in door_data.items()
-         if k not in {CONF_NAME, CONF_NOTIFICATION_SCRIPT, CONF_LOCK, "cover", CONF_DOOR_SENSOR}},
+         if k not in {CONF_NAME, CONF_LOCK, "cover", CONF_DOOR_SENSOR}},
     )
     await hass.async_block_till_done()
     return entry, result

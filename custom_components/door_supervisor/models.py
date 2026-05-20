@@ -16,7 +16,6 @@ class DoorConfig:
     lock_entity_id: str | None = None
     cover_entity_id: str | None = None
     sensor_entity_id: str | None = None
-    notification_script: str | None = None
     auto_lock_enabled: bool = True
     auto_lock_delay_minutes: int = 5
     lock_event_notifications: bool = True

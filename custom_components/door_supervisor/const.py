@@ -10,7 +10,6 @@ SUBENTRY_DOOR = "door"
 
 # Config keys (door subentry)
 CONF_NAME = "name"
-CONF_NOTIFICATION_SCRIPT = "notification_script"
 CONF_LOCK = "lock"
 CONF_COVER = "cover"
 CONF_DOOR_SENSOR = "door_sensor"

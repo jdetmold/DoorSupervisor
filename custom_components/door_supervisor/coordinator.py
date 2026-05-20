@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from typing import Callable
 
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
@@ -19,14 +19,12 @@ from .const import (
     CONF_LOCK,
     CONF_LOCK_EVENT_NOTIFICATIONS,
     CONF_NAME,
-    CONF_NOTIFICATION_SCRIPT,
     DEFAULT_AUTO_LOCK_DELAY_MINUTES,
     DEFAULT_AUTO_LOCK_ENABLED,
     DEFAULT_COVER_EVENT_NOTIFICATIONS,
     DEFAULT_LOCK_EVENT_NOTIFICATIONS,
     DOMAIN,
     EVENT_CLOSED,
-    EVENT_LEFT_OPEN_WARNING,
     EVENT_LOCKED,
     EVENT_OPENED,
     EVENT_UNLOCKED,
@@ -49,7 +47,6 @@ def _build_config(sub: ConfigSubentry) -> DoorConfig:
         lock_entity_id=data.get(CONF_LOCK),
         cover_entity_id=data.get(CONF_COVER),
         sensor_entity_id=data.get(CONF_DOOR_SENSOR),
-        notification_script=data.get(CONF_NOTIFICATION_SCRIPT),
         auto_lock_enabled=data.get(CONF_AUTO_LOCK_ENABLED, DEFAULT_AUTO_LOCK_ENABLED),
         auto_lock_delay_minutes=data.get(
             CONF_AUTO_LOCK_DELAY_MINUTES, DEFAULT_AUTO_LOCK_DELAY_MINUTES
@@ -62,22 +59,6 @@ def _build_config(sub: ConfigSubentry) -> DoorConfig:
         ),
         left_open_thresholds_minutes=tuple(thresholds),
     )
-
-
-def _format_message(door_name: str, event_type: str, extras: dict[str, Any]) -> str:
-    if event_type == EVENT_LOCKED:
-        if extras.get("auto"):
-            return f"{door_name} auto-locked"
-        return f"{door_name} locked"
-    if event_type == EVENT_UNLOCKED:
-        return f"{door_name} unlocked"
-    if event_type == EVENT_OPENED:
-        return f"{door_name} opened"
-    if event_type == EVENT_CLOSED:
-        return f"{door_name} closed"
-    if event_type == EVENT_LEFT_OPEN_WARNING:
-        return f"{door_name} has been open for {extras['minutes_open']} minutes"
-    return f"{door_name}: {event_type}"
 
 
 class DoorRuntime:
@@ -160,7 +141,7 @@ class DoorRuntime:
     def _apply_effects(self, effects: list) -> None:
         for effect in effects:
             if isinstance(effect, Notify):
-                self.coordinator.dispatch_notify(self.config, effect)
+                self.coordinator.fire_event(self.config, effect)
             elif isinstance(effect, LockNow):
                 if self.coordinator.should_block_auto_lock():
                     continue
@@ -254,41 +235,45 @@ class Coordinator:
             runtime.stop()
         self.doors.clear()
 
-    def dispatch_notify(self, cfg: DoorConfig, eff: Notify) -> None:
+    def fire_event(self, cfg: DoorConfig, eff: Notify) -> None:
+        """Fire an HA event for a door supervisor notification.
+
+        Gating layers:
+        - Global notifications_enabled switch
+        - Per-door category toggle (lock_event_notifications, cover_event_notifications)
+
+        Left-open warnings are always fired (the threshold list is the schedule).
+        """
         if not self.hub_state.notifications_enabled:
+            _LOGGER.debug("Event %s for %s suppressed: global notifications off",
+                          eff.event_type, cfg.name)
             return
         extras = eff.extras_dict
-        # Suppress auto-lock notifications when global auto-lock is disabled
+        # Suppress auto-lock fired notifications when global auto-lock is disabled
         if extras.get("auto") is True and not self.hub_state.auto_lock_enabled:
+            _LOGGER.debug("Event %s (auto=true) for %s suppressed: global auto-lock off",
+                          eff.event_type, cfg.name)
             return
         # Per-category gating
         if eff.event_type in (EVENT_LOCKED, EVENT_UNLOCKED):
             if not cfg.lock_event_notifications:
+                _LOGGER.debug("Event %s for %s suppressed: lock_event_notifications off",
+                              eff.event_type, cfg.name)
                 return
         elif eff.event_type in (EVENT_OPENED, EVENT_CLOSED):
-            # Only notify open/close when a cover is configured AND cover_event_notifications is on
             if cfg.cover_entity_id is None or not cfg.cover_event_notifications:
+                _LOGGER.debug("Event %s for %s suppressed: not a cover or cover_event_notifications off",
+                              eff.event_type, cfg.name)
                 return
-        # event_type == EVENT_LEFT_OPEN_WARNING is always allowed if it fires
-        if not cfg.notification_script:
-            return
-        message = _format_message(cfg.name, eff.event_type, extras)
-        payload = {
-            "door_name": cfg.name,
-            "event_type": eff.event_type,
-            "message": message,
+        # Fire the event
+        event_type = f"{DOMAIN}.{eff.event_type}"
+        event_data = {
+            "door": cfg.name,
             "entity_id": eff.entity_id,
             **extras,
         }
-        domain, _, name = cfg.notification_script.partition(".")
-        if domain != "script":
-            _LOGGER.warning("notification_script %s is not a script entity", cfg.notification_script)
-            return
-        self.hass.async_create_task(
-            self.hass.services.async_call(
-                "script", name, {"variables": payload}, blocking=False
-            )
-        )
+        _LOGGER.info("Firing event %s for door %s: %s", event_type, cfg.name, event_data)
+        self.hass.bus.async_fire(event_type, event_data)
 
     def should_block_auto_lock(self) -> bool:
         return not self.hub_state.auto_lock_enabled

@@ -26,7 +26,6 @@ from .const import (
     CONF_LOCK,
     CONF_LOCK_EVENT_NOTIFICATIONS,
     CONF_NAME,
-    CONF_NOTIFICATION_SCRIPT,
     DEFAULT_AUTO_LOCK_DELAY_MINUTES,
     DEFAULT_AUTO_LOCK_ENABLED,
     DEFAULT_COVER_EVENT_NOTIFICATIONS,
@@ -96,12 +95,6 @@ class DoorSubentryFlow(ConfigSubentryFlow):
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME, default=self._data.get(CONF_NAME, "")): str,
-                vol.Optional(
-                    CONF_NOTIFICATION_SCRIPT,
-                    default=self._data.get(CONF_NOTIFICATION_SCRIPT, vol.UNDEFINED),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="script")
-                ),
             }
         )
         return self.async_show_form(step_id="basics", data_schema=schema)
