@@ -116,8 +116,16 @@ Each door runs an internal state machine driven by HA state-change events. The c
 
 Gated by: lock configured AND `auto_lock_enabled` AND global `auto_lock_enabled` switch on.
 
-- **With open/closed signal (sensor or cover):** countdown starts on `closed` event. Cancels on `opened`. Restarts from zero on next `closed`. After delay elapses, calls `lock.lock` service on the configured lock and emits a `locked` event with `auto: true`.
-- **Without open/closed signal (lock-only):** countdown starts on `unlocked` event. Cancels if a `locked` event arrives before delay elapses. Otherwise locks.
+The countdown is eligible to run when the lock is **unlocked** and the door is **not open** (closed, or no open/close signal exists).
+
+- **Unlock event** → start the countdown.
+- **Close event** → restart the countdown from zero ("reset on every close").
+- **Open event** → cancel the countdown (can't lock an open door); restarts on next close.
+- **Manual lock** → cancel the countdown.
+- **Unknown state** → cancel the countdown.
+- **Timer fires** → if the door is not open and the lock is still unlocked, call `lock.lock` and emit a `locked` event with `auto: true`.
+
+This means unlocking a closed door that is never opened still auto-locks after the delay. Lock-only doors (no open/close signal) count down from the unlock event.
 
 ### Left-open logic
 

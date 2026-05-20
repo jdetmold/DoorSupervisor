@@ -122,9 +122,8 @@ async def test_auto_lock_event_includes_auto_true(hass: HomeAssistant):
             auto_lock_delay_minutes=5,
             lock_event_notifications=True,
         )
-        hass.states.async_set("binary_sensor.front_door", "on")
-        await hass.async_block_till_done()
-        hass.states.async_set("binary_sensor.front_door", "off")
+        # Door is closed (sensor off). Unlock it → countdown starts.
+        hass.states.async_set("lock.front", "unlocked")
         await hass.async_block_till_done()
         events.clear()
         frozen.tick(delta=timedelta(minutes=5, seconds=1))
@@ -150,9 +149,7 @@ async def test_auto_lock_event_suppressed_when_global_auto_lock_off(hass: HomeAs
         blocking=True,
     )
     with freeze_time(dt_util.utcnow()) as frozen:
-        hass.states.async_set("binary_sensor.front_door", "on")
-        await hass.async_block_till_done()
-        hass.states.async_set("binary_sensor.front_door", "off")
+        hass.states.async_set("lock.front", "unlocked")
         await hass.async_block_till_done()
         events.clear()
         frozen.tick(delta=timedelta(minutes=5, seconds=1))

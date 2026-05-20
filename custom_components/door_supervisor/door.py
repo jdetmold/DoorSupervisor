@@ -128,12 +128,9 @@ class Door:
             self._next_threshold_idx = 0
             effects.append(Notify.make(EVENT_OPENED, source_entity))
             effects.extend(self._schedule_next_threshold())
-            # Opening cancels any pending auto-lock countdown
-            if self._auto_lock_eta is not None:
-                effects.append(Cancel(name=SCHED_AUTO_LOCK))
-                self._auto_lock_eta = None
+            # Opening cancels any pending auto-lock — can't lock an open door.
+            effects.extend(self._cancel_auto_lock())
         elif new_open is False:
-            # Cancel any pending threshold before resetting index
             if self.config.left_open_thresholds_minutes and self._open_since is not None:
                 effects.append(
                     Cancel(name=f"{SCHED_THRESHOLD_PREFIX}{self._next_threshold_idx}")
@@ -141,29 +138,48 @@ class Door:
             self._open_since = None
             self._next_threshold_idx = 0
             effects.append(Notify.make(EVENT_CLOSED, source_entity))
-            effects.extend(self._maybe_schedule_auto_lock())
+            # Closing resets the auto-lock countdown (if the lock is unlocked).
+            effects.extend(self._restart_auto_lock())
         else:
-            # Transitioned to unknown — cancel any pending threshold and clear state.
+            # Transitioned to unknown — cancel pending threshold and auto-lock.
             if self.config.left_open_thresholds_minutes and self._open_since is not None:
                 effects.append(
                     Cancel(name=f"{SCHED_THRESHOLD_PREFIX}{self._next_threshold_idx}")
                 )
             self._open_since = None
             self._next_threshold_idx = 0
+            effects.extend(self._cancel_auto_lock())
         return effects
 
-    def _maybe_schedule_auto_lock(self) -> list[DoorEffect]:
-        """Schedule auto-lock from a closed state, if eligible."""
-        if not self.config.lock_entity_id or not self.config.auto_lock_enabled:
-            return []
-        if not self.config.has_open_close_signal:
-            # lock-only mode is handled separately by on_lock_state
-            return []
-        delay_seconds = self.config.auto_lock_delay_minutes * 60
+    def _auto_lock_eligible(self) -> bool:
+        """Whether the auto-lock countdown should be running right now."""
+        return (
+            self.config.lock_entity_id is not None
+            and self.config.auto_lock_enabled
+            and self._lock_locked is False
+            and self.is_open is not True
+        )
+
+    def _restart_auto_lock(self) -> list[DoorEffect]:
+        """Cancel any existing countdown and start a fresh one if eligible."""
         from datetime import timedelta
 
-        self._auto_lock_eta = self._clock() + timedelta(seconds=delay_seconds)
-        return [Schedule(name=SCHED_AUTO_LOCK, delay_seconds=delay_seconds)]
+        effects: list[DoorEffect] = []
+        if self._auto_lock_eta is not None:
+            effects.append(Cancel(name=SCHED_AUTO_LOCK))
+            self._auto_lock_eta = None
+        if self._auto_lock_eligible():
+            delay = self.config.auto_lock_delay_minutes * 60
+            self._auto_lock_eta = self._clock() + timedelta(seconds=delay)
+            effects.append(Schedule(name=SCHED_AUTO_LOCK, delay_seconds=delay))
+        return effects
+
+    def _cancel_auto_lock(self) -> list[DoorEffect]:
+        """Cancel a pending auto-lock countdown, if any."""
+        if self._auto_lock_eta is not None:
+            self._auto_lock_eta = None
+            return [Cancel(name=SCHED_AUTO_LOCK)]
+        return []
 
     def _schedule_next_threshold(self) -> list[DoorEffect]:
         """Schedule the next threshold callback, if any remain."""
@@ -192,20 +208,17 @@ class Door:
 
     def _on_auto_lock_fired(self) -> list[DoorEffect]:
         if self._auto_lock_eta is None:
-            return []  # stale
+            return []  # stale callback
         self._auto_lock_eta = None
-        # Defensive: if door is open when callback fires, do nothing
-        if self.config.has_open_close_signal and self.is_open:
+        # Only lock if the door is not open and the lock is still unlocked.
+        if self.is_open is True:
             return []
-        # Optimistically mark lock as locked to avoid double-emit when the lock entity reflects the change
+        if self._lock_locked is True:
+            return []
         self._lock_locked = True
         return [
             LockNow(),
-            Notify.make(
-                EVENT_LOCKED,
-                self.config.lock_entity_id or "",
-                auto=True,
-            ),
+            Notify.make(EVENT_LOCKED, self.config.lock_entity_id or "", auto=True),
         ]
 
     def _on_threshold_fired(self, name: str) -> list[DoorEffect]:
@@ -243,21 +256,10 @@ class Door:
             effects.append(
                 Notify.make(EVENT_LOCKED, self.config.lock_entity_id or "", auto=False)
             )
-            # Manual relock cancels any pending auto-lock countdown
-            if self._auto_lock_eta is not None:
-                effects.append(Cancel(name=SCHED_AUTO_LOCK))
-                self._auto_lock_eta = None
+            # Manual lock cancels any pending auto-lock countdown.
+            effects.extend(self._cancel_auto_lock())
         else:
             effects.append(Notify.make(EVENT_UNLOCKED, self.config.lock_entity_id or ""))
-            # Lock-only mode: schedule auto-lock from unlock event
-            if (
-                self.config.auto_lock_enabled
-                and not self.config.has_open_close_signal
-                and self.config.lock_entity_id
-            ):
-                from datetime import timedelta
-
-                delay = self.config.auto_lock_delay_minutes * 60
-                self._auto_lock_eta = self._clock() + timedelta(seconds=delay)
-                effects.append(Schedule(name=SCHED_AUTO_LOCK, delay_seconds=delay))
+            # Unlock starts the countdown (if eligible: door not open).
+            effects.extend(self._restart_auto_lock())
         return effects

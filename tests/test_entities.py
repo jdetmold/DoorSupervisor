@@ -79,7 +79,7 @@ async def test_open_duration_sensor_ticks(hass: HomeAssistant):
         assert state.state == "3"
 
 
-async def test_auto_lock_eta_sensor_set_on_close(hass: HomeAssistant):
+async def test_auto_lock_eta_sensor_set_on_unlock(hass: HomeAssistant):
     with freeze_time(dt_util.utcnow()):
         await _setup(hass, {
             CONF_NAME: "Front Door",
@@ -90,10 +90,8 @@ async def test_auto_lock_eta_sensor_set_on_close(hass: HomeAssistant):
             "lock_event_notifications": False,
             CONF_LEFT_OPEN_THRESHOLDS: "",
         })
-        hass.states.async_set("binary_sensor.front_door", "on")
-        await hass.async_block_till_done()
-        hass.states.async_set("binary_sensor.front_door", "off")
+        # Door is closed (sensor off by default in _setup). Unlock → countdown starts.
+        hass.states.async_set("lock.front", "unlocked")
         await hass.async_block_till_done()
         state = hass.states.get("sensor.front_door_auto_lock_eta")
-        # should be a timestamp ~5 minutes from now, not "unavailable"
         assert state.state != "unavailable"

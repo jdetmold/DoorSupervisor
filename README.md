@@ -30,8 +30,16 @@ Edit any door later via the gear icon on the integration page — all settings (
 
 ## Auto-lock
 
-- **With open/close signal:** countdown starts when the door reaches *closed*. Cancels on open, restarts on the next close. Manually locking during the countdown cancels it.
-- **Without open/close signal (lock only):** countdown starts on the *unlock* event. Cancels if you re-lock manually.
+The countdown starts when the door is **unlocked** and resets every time the door **closes**:
+
+- Unlock a door → countdown starts (even if you never open it — it'll still lock).
+- Open the door → countdown pauses (we won't throw the bolt into an open door). It restarts when the door closes.
+- Each close resets the countdown to the full delay.
+- Manually lock → countdown cancels.
+
+For **lock-only doors** (no door sensor or cover), the countdown simply runs from the unlock event and locks after the delay.
+
+The global **Auto-lock** switch on the hub suppresses all auto-locking when off.
 
 ## Left-open warnings
 
