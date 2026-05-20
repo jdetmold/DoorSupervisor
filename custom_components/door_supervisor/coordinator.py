@@ -123,6 +123,10 @@ class DoorRuntime:
         self._apply_state(event.data["entity_id"], new.state, seed=False)
 
     def _apply_state(self, entity_id: str, state: str, seed: bool = False) -> None:
+        _LOGGER.debug(
+            "Door %s: state change %s=%s (seed=%s)",
+            self.config.name, entity_id, state, seed,
+        )
         if entity_id == self.config.lock_entity_id:
             effects = self.door.on_lock_state(state)
         elif entity_id == self.config.cover_entity_id:
@@ -144,7 +148,16 @@ class DoorRuntime:
                 self.coordinator.fire_event(self.config, effect)
             elif isinstance(effect, LockNow):
                 if self.coordinator.should_block_auto_lock():
+                    _LOGGER.debug(
+                        "Auto-lock for %s blocked by global auto-lock switch",
+                        self.config.name,
+                    )
                     continue
+                _LOGGER.info(
+                    "Auto-lock firing for %s: calling lock.lock on %s",
+                    self.config.name,
+                    self.config.lock_entity_id,
+                )
                 self.hass.async_create_task(
                     self.hass.services.async_call(
                         "lock", "lock",
@@ -195,6 +208,13 @@ class Coordinator:
             runtime = DoorRuntime(self.hass, self, sub_id, cfg)
             runtime.start()
             self.doors[sub_id] = runtime
+            _LOGGER.info(
+                "Door Supervisor: watching '%s' (lock=%s cover=%s sensor=%s "
+                "auto_lock=%s delay=%smin thresholds=%s)",
+                cfg.name, cfg.lock_entity_id, cfg.cover_entity_id,
+                cfg.sensor_entity_id, cfg.auto_lock_enabled,
+                cfg.auto_lock_delay_minutes, cfg.left_open_thresholds_minutes,
+            )
             if self.entity_factory is not None:
                 self.entity_factory(sub_id, runtime)
         # Watch for subentry additions/removals in-memory (avoids full reload)

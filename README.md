@@ -1,78 +1,116 @@
 # Door Supervisor
 
-Home Assistant custom integration that centralizes door supervision:
+A Home Assistant custom integration that centralizes door supervision:
 
-- **Auto-lock** doors after they've been closed for N minutes (with smart "wait until actually closed" when a door sensor is configured)
-- **Left-open warnings** at configurable thresholds (e.g. notify at 30, 60, and 90 minutes)
-- **Lock and cover event notifications** routed through a script you control
+- **Auto-lock** doors after they've been closed for N minutes (waits for the door to actually close when a sensor is configured — no bolt-into-jamb)
+- **Left-open warnings** at configurable thresholds (e.g. 30, 60, 90 minutes)
+- **Native HA events** for every lock/cover/open/close/warning, so you route notifications with a normal HA automation — full trace support, any notify channel, any logic
 
-One config entry per install, one subentry per door — no more piles of automations.
+One config entry per install, one subentry per door — no more piles of per-door automations for the supervision logic itself.
 
 ## Installation (HACS)
 
-1. Add this repo as a custom HACS repository (type: Integration).
-2. Install **Door Supervisor** from HACS.
-3. Restart Home Assistant.
+1. HACS → Integrations → ⋮ → Custom repositories.
+2. Add `https://github.com/jdetmold/DoorSupervisor` with category **Integration**.
+3. Install **Door Supervisor**, restart Home Assistant.
 4. Settings → Devices & Services → Add Integration → Door Supervisor.
-5. The hub is created. Click "Add door" to add each door.
+5. The hub is created. Click **Add door** to add each door.
 
 ## Per-door configuration
 
 Each door is a name + any combination of:
 
-- **Lock** entity (`lock.*`) — required for auto-lock and lock event notifications
-- **Cover** entity (`cover.*`) — for garage doors and similar
-- **Door sensor** (`binary_sensor.*`) — provides authoritative open/closed signal
+- **Lock** (`lock.*`) — required for auto-lock and lock events
+- **Cover** (`cover.*`) — for garage doors and similar
+- **Door sensor** (`binary_sensor.*`) — authoritative open/closed signal
 
-At least one of these is required. If both a sensor and a cover are configured, the **sensor wins** for open/closed determination (because cover state can be unreliable on some hardware).
+At least one is required. If both a sensor and a cover are configured, the **sensor wins** for open/closed determination (cover state can be unreliable on some hardware).
 
-Plus optional:
-
-- **Notification script** — a `script.*` entity that receives every notification this door emits. Without this, the door still functions (auto-lock, status sensor) but produces no notifications.
+Edit any door later via the gear icon on the integration page — all settings (entities, auto-lock delay, thresholds, toggles) are editable.
 
 ## Auto-lock
 
-- **With open/close signal**: countdown starts when the door reaches *closed*. Cancels on open. Restarts on the next close. (No more bolt-into-jamb scenarios.)
-- **Without open/close signal (lock only)**: countdown starts on the *unlock* event. Cancels if you re-lock manually.
+- **With open/close signal:** countdown starts when the door reaches *closed*. Cancels on open, restarts on the next close. Manually locking during the countdown cancels it.
+- **Without open/close signal (lock only):** countdown starts on the *unlock* event. Cancels if you re-lock manually.
 
 ## Left-open warnings
 
-Configure a list of minute thresholds (e.g. `5` or `30,60,90`). The script is called once at each threshold. After the last threshold, no more warnings until the door closes and reopens.
+Configure a comma-separated list of minute thresholds (e.g. `5` or `30,60,90`). One warning event fires at each threshold. After the last threshold, no more until the door closes and reopens.
 
-## Notification script payload
+## Notifications — you write one automation
 
-The script receives these variables:
+Door Supervisor fires native HA events. You handle notifications however you like in a normal automation (with full trace support).
 
-| Field | Always present? | Notes |
-|-------|-----------------|-------|
-| `door_name` | yes | User-given name |
-| `event_type` | yes | `locked`, `unlocked`, `opened`, `closed`, `left_open_warning` |
-| `message` | yes | Pre-formatted English message |
-| `entity_id` | yes | The entity that triggered the event |
-| `minutes_open` | only on `left_open_warning` | Threshold value that fired |
-| `auto` | only on `locked` | `true` if auto-lock fired, `false` if manual |
+### Events fired
 
-**Note on `opened` / `closed` events:** these fire only for doors with a cover entity configured (with `cover_event_notifications` enabled). Sensor-only doors emit only `left_open_warning`. If you want to be notified every time a sensor-only door opens or closes, configure thresholds — or add a cover entity if your hardware supports it.
+| Event | Data | When |
+|-------|------|------|
+| `door_supervisor.opened` | `door`, `entity_id` | Door opened (cover-based doors) |
+| `door_supervisor.closed` | `door`, `entity_id` | Door closed (cover-based doors) |
+| `door_supervisor.locked` | `door`, `entity_id`, `auto` | Lock locked (`auto: true` if auto-lock fired) |
+| `door_supervisor.unlocked` | `door`, `entity_id` | Lock unlocked |
+| `door_supervisor.left_open_warning` | `door`, `entity_id`, `minutes_open` | A configured threshold elapsed |
 
-Example script using the message as-is:
+Notes:
+- `opened`/`closed` events fire only for doors with a **cover** configured (and `cover_event_notifications` enabled). Sensor-only doors fire `left_open_warning` only.
+- `locked`/`unlocked` fire only when `lock_event_notifications` is enabled for the door.
+- The global **Notifications** switch (on the hub device) suppresses all events when off.
+- The global **Auto-lock** switch suppresses both the lock action and the `auto: true` event when off.
+
+### Example notification automation
 
 ```yaml
-notify_phone:
-  fields:
-    message: {}
-    door_name: {}
-    event_type: {}
-  sequence:
-    - service: notify.mobile_app_pixel
-      data:
-        message: "{{ message }}"
+- alias: "Door Supervisor notifications"
+  trigger:
+    - platform: event
+      event_type: door_supervisor.unlocked
+    - platform: event
+      event_type: door_supervisor.locked
+    - platform: event
+      event_type: door_supervisor.left_open_warning
+  action:
+    - variables:
+        door: "{{ trigger.event.data.door }}"
+        kind: "{{ trigger.event.event_type.split('.')[1] }}"
+    - choose:
+        - conditions: "{{ kind == 'left_open_warning' }}"
+          sequence:
+            - service: notify.mobile_app_jjdiphone15
+              data:
+                title: "⚠️ {{ door }} left open"
+                message: "{{ door }} has been open for {{ trigger.event.data.minutes_open }} minutes"
+        - conditions: "{{ kind == 'locked' }}"
+          sequence:
+            - service: notify.mobile_app_jjdiphone15
+              data:
+                message: >
+                  {{ door }} {{ 'auto-locked' if trigger.event.data.auto else 'locked' }}
+      default:
+        - service: notify.mobile_app_jjdiphone15
+          data:
+            message: "{{ door }} {{ kind }}"
 ```
+
+### Adding "who unlocked" (Keymaster, RFID, etc.)
+
+Because notifications are just an automation, you have full access to whatever other integrations expose. Look it up at trigger time — no Door Supervisor configuration required. For example, with Keymaster:
+
+```yaml
+    - service: notify.mobile_app_jjdiphone15
+      data:
+        message: >
+          {{ door }} unlocked
+          {%- set who = state_attr('sensor.front_door_keymaster', 'usercode_name') %}
+          {%- if who %} by {{ who }}{% endif %}
+```
+
+Use whatever attribute or entity your setup actually exposes — the integration doesn't need to know about it.
 
 ## Global controls
 
-Two hub-level switches:
+Two switches on the **Door Supervisor** hub device:
 
-- `switch.door_supervisor_notifications_enabled` — kill switch for all notifications
+- `switch.door_supervisor_notifications_enabled` — kill switch for all events
 - `switch.door_supervisor_auto_lock_enabled` — kill switch for all auto-locks
 
 ## Per-door entities
@@ -81,7 +119,20 @@ Each door produces:
 
 - `sensor.<door>_status` — `closed` / `open` / `open_warning` / `unknown`
 - `sensor.<door>_open_duration_minutes` — minutes since opening
-- `sensor.<door>_auto_lock_eta` — timestamp; dashboards render as live countdown
+- `sensor.<door>_auto_lock_eta` — timestamp; dashboards render as a live countdown
+
+## Troubleshooting
+
+Enable debug logging to see exactly what the integration is doing:
+
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.door_supervisor: debug
+```
+
+You'll see lines for every state change received, every event fired (and why one was suppressed), and every auto-lock service call. If an auto-lock log appears but the lock doesn't move, the problem is with the lock/Z-Wave, not this integration.
 
 ## License
 
