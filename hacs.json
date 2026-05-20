@@ -2,5 +2,7 @@
   "name": "Door Supervisor",
   "render_readme": true,
   "homeassistant": "2025.1.0",
-  "country": ["CA", "US"]
+  "country": ["CA", "US"],
+  "zip_release": true,
+  "filename": "door_supervisor.zip"
 }

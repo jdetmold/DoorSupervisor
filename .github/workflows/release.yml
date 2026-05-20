@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: ["version.txt"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "version=$(tr -d '[:space:]' < version.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Bake version into manifest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tmp="$(mktemp)"
+          jq --arg v "$VERSION" \
+            '.version = $v' \
+            custom_components/door_supervisor/manifest.json > "$tmp"
+          mv "$tmp" custom_components/door_supervisor/manifest.json
+          echo "manifest version is now:"
+          jq -r '.version' custom_components/door_supervisor/manifest.json
+
+      - name: Create release zip
+        run: |
+          cd custom_components/door_supervisor
+          zip -r "$GITHUB_WORKSPACE/door_supervisor.zip" .
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          files: door_supervisor.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
