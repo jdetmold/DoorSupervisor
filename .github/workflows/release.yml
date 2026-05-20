@@ -35,7 +35,7 @@ jobs:
       - name: Create release zip
         run: |
           cd custom_components/door_supervisor
-          zip -r "$GITHUB_WORKSPACE/door_supervisor.zip" .
+          zip -r "$GITHUB_WORKSPACE/door_supervisor.zip" . -x '*__pycache__*' -x '*.pyc'
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
