@@ -76,7 +76,7 @@ async def test_cover_open_at_startup_does_not_fire_opened_notification(hass: Hom
     )
     await hass.config_entries.subentries.async_configure(
         result["flow_id"],
-        {"cover_event_notifications": True, "left_open_thresholds_minutes": ""},
+        {"open_close_notifications": True, "left_open_thresholds_minutes": ""},
     )
     await hass.async_block_till_done()
     # No opened event should have fired during seed

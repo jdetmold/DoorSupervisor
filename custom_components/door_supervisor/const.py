@@ -16,14 +16,17 @@ CONF_DOOR_SENSOR = "door_sensor"
 CONF_AUTO_LOCK_ENABLED = "auto_lock_enabled"
 CONF_AUTO_LOCK_DELAY_MINUTES = "auto_lock_delay_minutes"
 CONF_LOCK_EVENT_NOTIFICATIONS = "lock_event_notifications"
-CONF_COVER_EVENT_NOTIFICATIONS = "cover_event_notifications"
+CONF_OPEN_CLOSE_NOTIFICATIONS = "open_close_notifications"
 CONF_LEFT_OPEN_THRESHOLDS = "left_open_thresholds_minutes"
+
+# Legacy key (kept for migration fallback only — do not use in new code)
+LEGACY_CONF_COVER_EVENT_NOTIFICATIONS = "cover_event_notifications"
 
 # Defaults
 DEFAULT_AUTO_LOCK_DELAY_MINUTES = 5
 DEFAULT_AUTO_LOCK_ENABLED = True
 DEFAULT_LOCK_EVENT_NOTIFICATIONS = True
-DEFAULT_COVER_EVENT_NOTIFICATIONS = True
+DEFAULT_OPEN_CLOSE_NOTIFICATIONS = True
 DEFAULT_LEFT_OPEN_THRESHOLDS: tuple[int, ...] = ()
 
 # Event type values passed to notification script

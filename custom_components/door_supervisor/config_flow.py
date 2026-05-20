@@ -20,16 +20,16 @@ from .const import (
     CONF_AUTO_LOCK_DELAY_MINUTES,
     CONF_AUTO_LOCK_ENABLED,
     CONF_COVER,
-    CONF_COVER_EVENT_NOTIFICATIONS,
     CONF_DOOR_SENSOR,
     CONF_LEFT_OPEN_THRESHOLDS,
     CONF_LOCK,
     CONF_LOCK_EVENT_NOTIFICATIONS,
     CONF_NAME,
+    CONF_OPEN_CLOSE_NOTIFICATIONS,
     DEFAULT_AUTO_LOCK_DELAY_MINUTES,
     DEFAULT_AUTO_LOCK_ENABLED,
-    DEFAULT_COVER_EVENT_NOTIFICATIONS,
     DEFAULT_LOCK_EVENT_NOTIFICATIONS,
+    DEFAULT_OPEN_CLOSE_NOTIFICATIONS,
     DOMAIN,
     HUB_AUTO_LOCK_ENABLED,
     HUB_NOTIFICATIONS_ENABLED,
@@ -181,17 +181,16 @@ class DoorSubentryFlow(ConfigSubentryFlow):
                     ),
                 )
             ] = bool
-        if has_cover:
+        if has_signal:
             fields[
                 vol.Optional(
-                    CONF_COVER_EVENT_NOTIFICATIONS,
+                    CONF_OPEN_CLOSE_NOTIFICATIONS,
                     default=self._data.get(
-                        CONF_COVER_EVENT_NOTIFICATIONS,
-                        DEFAULT_COVER_EVENT_NOTIFICATIONS,
+                        CONF_OPEN_CLOSE_NOTIFICATIONS,
+                        DEFAULT_OPEN_CLOSE_NOTIFICATIONS,
                     ),
                 )
             ] = bool
-        if has_signal:
             existing = self._data.get(CONF_LEFT_OPEN_THRESHOLDS, [])
             default_str = ",".join(str(x) for x in existing) if existing else ""
             fields[

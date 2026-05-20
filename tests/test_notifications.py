@@ -14,6 +14,7 @@ from custom_components.door_supervisor.const import (
     CONF_LEFT_OPEN_THRESHOLDS,
     CONF_LOCK,
     CONF_NAME,
+    CONF_OPEN_CLOSE_NOTIFICATIONS,
     DOMAIN,
     SUBENTRY_DOOR,
 )
@@ -157,3 +158,33 @@ async def test_auto_lock_event_suppressed_when_global_auto_lock_off(hass: HomeAs
         await hass.async_block_till_done()
     auto_events = [e for e in events if e.data.get("auto") is True]
     assert auto_events == []
+
+
+async def test_sensor_only_door_fires_open_close_when_enabled(hass: HomeAssistant):
+    events = []
+    hass.bus.async_listen(f"{DOMAIN}.opened", lambda e: events.append(e))
+    hass.states.async_set("binary_sensor.basement", "off")
+    await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    await hass.async_block_till_done()
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_DOOR), context={"source": "user"}
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_NAME: "Basement"}
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_DOOR_SENSOR: "binary_sensor.basement"}
+    )
+    await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {CONF_OPEN_CLOSE_NOTIFICATIONS: True, "left_open_thresholds_minutes": ""},
+    )
+    await hass.async_block_till_done()
+    events.clear()
+    hass.states.async_set("binary_sensor.basement", "on")
+    await hass.async_block_till_done()
+    assert len(events) == 1
+    assert events[0].data["door"] == "Basement"

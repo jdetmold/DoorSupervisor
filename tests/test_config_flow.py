@@ -69,12 +69,12 @@ from custom_components.door_supervisor.const import (
     CONF_AUTO_LOCK_DELAY_MINUTES,
     CONF_AUTO_LOCK_ENABLED,
     CONF_COVER,
-    CONF_COVER_EVENT_NOTIFICATIONS,
     CONF_DOOR_SENSOR,
     CONF_LEFT_OPEN_THRESHOLDS,
     CONF_LOCK,
     CONF_LOCK_EVENT_NOTIFICATIONS,
     CONF_NAME,
+    CONF_OPEN_CLOSE_NOTIFICATIONS,
     SUBENTRY_DOOR,
 )
 
@@ -155,7 +155,7 @@ async def test_subentry_cover_only_features_step_omits_lock_fields(hass: HomeAss
     )
     schema_keys = {k.schema if hasattr(k, "schema") else k for k in result["data_schema"].schema}
     assert CONF_AUTO_LOCK_ENABLED not in schema_keys
-    assert CONF_COVER_EVENT_NOTIFICATIONS in schema_keys
+    assert CONF_OPEN_CLOSE_NOTIFICATIONS in schema_keys
     assert CONF_LEFT_OPEN_THRESHOLDS in schema_keys
 
 
@@ -212,3 +212,19 @@ async def test_subentry_reconfigure_updates_existing_door(hass: HomeAssistant):
     assert len(entry.subentries) == 1
     assert sub_id in entry.subentries
     assert entry.subentries[sub_id].data[CONF_AUTO_LOCK_DELAY_MINUTES] == 10
+
+
+async def test_subentry_sensor_only_features_step_includes_open_close_toggle(hass: HomeAssistant):
+    entry = await _setup_hub(hass)
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_DOOR), context={"source": "user"}
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_NAME: "Basement"}
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_DOOR_SENSOR: "binary_sensor.basement"}
+    )
+    schema_keys = {k.schema if hasattr(k, "schema") else k for k in result["data_schema"].schema}
+    assert CONF_OPEN_CLOSE_NOTIFICATIONS in schema_keys
+    assert CONF_LEFT_OPEN_THRESHOLDS in schema_keys

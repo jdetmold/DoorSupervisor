@@ -13,21 +13,22 @@ from .const import (
     CONF_AUTO_LOCK_DELAY_MINUTES,
     CONF_AUTO_LOCK_ENABLED,
     CONF_COVER,
-    CONF_COVER_EVENT_NOTIFICATIONS,
     CONF_DOOR_SENSOR,
     CONF_LEFT_OPEN_THRESHOLDS,
     CONF_LOCK,
     CONF_LOCK_EVENT_NOTIFICATIONS,
     CONF_NAME,
+    CONF_OPEN_CLOSE_NOTIFICATIONS,
     DEFAULT_AUTO_LOCK_DELAY_MINUTES,
     DEFAULT_AUTO_LOCK_ENABLED,
-    DEFAULT_COVER_EVENT_NOTIFICATIONS,
     DEFAULT_LOCK_EVENT_NOTIFICATIONS,
+    DEFAULT_OPEN_CLOSE_NOTIFICATIONS,
     DOMAIN,
     EVENT_CLOSED,
     EVENT_LOCKED,
     EVENT_OPENED,
     EVENT_UNLOCKED,
+    LEGACY_CONF_COVER_EVENT_NOTIFICATIONS,
     SUBENTRY_DOOR,
 )
 from .door import Door
@@ -54,8 +55,9 @@ def _build_config(sub: ConfigSubentry) -> DoorConfig:
         lock_event_notifications=data.get(
             CONF_LOCK_EVENT_NOTIFICATIONS, DEFAULT_LOCK_EVENT_NOTIFICATIONS
         ),
-        cover_event_notifications=data.get(
-            CONF_COVER_EVENT_NOTIFICATIONS, DEFAULT_COVER_EVENT_NOTIFICATIONS
+        open_close_notifications=data.get(
+            CONF_OPEN_CLOSE_NOTIFICATIONS,
+            data.get(LEGACY_CONF_COVER_EVENT_NOTIFICATIONS, DEFAULT_OPEN_CLOSE_NOTIFICATIONS),
         ),
         left_open_thresholds_minutes=tuple(thresholds),
     )
@@ -260,7 +262,7 @@ class Coordinator:
 
         Gating layers:
         - Global notifications_enabled switch
-        - Per-door category toggle (lock_event_notifications, cover_event_notifications)
+        - Per-door category toggle (lock_event_notifications, open_close_notifications)
 
         Left-open warnings are always fired (the threshold list is the schedule).
         """
@@ -281,9 +283,11 @@ class Coordinator:
                               eff.event_type, cfg.name)
                 return
         elif eff.event_type in (EVENT_OPENED, EVENT_CLOSED):
-            if cfg.cover_entity_id is None or not cfg.cover_event_notifications:
-                _LOGGER.debug("Event %s for %s suppressed: not a cover or cover_event_notifications off",
-                              eff.event_type, cfg.name)
+            if not cfg.open_close_notifications:
+                _LOGGER.debug(
+                    "Event %s for %s suppressed: open_close_notifications off",
+                    eff.event_type, cfg.name,
+                )
                 return
         # Fire the event
         event_type = f"{DOMAIN}.{eff.event_type}"

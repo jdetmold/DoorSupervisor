@@ -39,7 +39,7 @@
             "auto_lock_enabled": "Enable auto-lock",
             "auto_lock_delay_minutes": "Auto-lock delay (minutes)",
             "lock_event_notifications": "Notify on lock/unlock",
-            "cover_event_notifications": "Notify on open/close",
+            "open_close_notifications": "Notify on every open/close",
             "left_open_thresholds_minutes": "Left-open thresholds (comma-separated minutes, e.g. 30,60,90)"
           }
         }

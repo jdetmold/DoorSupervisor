@@ -19,7 +19,7 @@ class DoorConfig:
     auto_lock_enabled: bool = True
     auto_lock_delay_minutes: int = 5
     lock_event_notifications: bool = True
-    cover_event_notifications: bool = True
+    open_close_notifications: bool = True
     left_open_thresholds_minutes: tuple[int, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:

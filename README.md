@@ -53,14 +53,14 @@ Door Supervisor fires native HA events. You handle notifications however you lik
 
 | Event | Data | When |
 |-------|------|------|
-| `door_supervisor.opened` | `door`, `entity_id` | Door opened (cover-based doors) |
-| `door_supervisor.closed` | `door`, `entity_id` | Door closed (cover-based doors) |
+| `door_supervisor.opened` | `door`, `entity_id` | Door opened (any door with a sensor or cover, when open/close notifications enabled) |
+| `door_supervisor.closed` | `door`, `entity_id` | Door closed (any door with a sensor or cover, when open/close notifications enabled) |
 | `door_supervisor.locked` | `door`, `entity_id`, `auto` | Lock locked (`auto: true` if auto-lock fired) |
 | `door_supervisor.unlocked` | `door`, `entity_id` | Lock unlocked |
 | `door_supervisor.left_open_warning` | `door`, `entity_id`, `minutes_open` | A configured threshold elapsed |
 
 Notes:
-- `opened`/`closed` events fire only for doors with a **cover** configured (and `cover_event_notifications` enabled). Sensor-only doors fire `left_open_warning` only.
+- `opened`/`closed` events fire for any door that has a **sensor or cover** configured when **open/close notifications** is enabled for that door.
 - `locked`/`unlocked` fire only when `lock_event_notifications` is enabled for the door.
 - The global **Notifications** switch (on the hub device) suppresses all events when off.
 - The global **Auto-lock** switch suppresses both the lock action and the `auto: true` event when off.
